@@ -2,6 +2,12 @@
 
 第一家店不满意时，从已有候选中找到更适合此刻的下一站。输入像吐槽，输出是能比较、有依据的决策卡片。
 
+## 公开预览
+
+https://jamiechou2004.github.io/redcowork-ai-demo/
+
+GitHub Pages 自动发布 main 分支，推送后通常需要几分钟更新。该链接是离线 Demo 预览，不是 REDcowork 最终提交链接。
+
 ## 本地使用
 
 直接用现代浏览器打开 `src/index.html`，无需安装依赖或构建。脚本按 samples → ai → app 顺序加载，使用经典脚本命名空间，避免本地文件的 ES Module 跨域限制。
