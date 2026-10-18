@@ -39,11 +39,13 @@ window.AI = (() => {
   function decorate(intent,mood,bar){
     const desired=[...intent.want,...intent.taste].filter(x=>x!=='近一点');
     const matchTags=desired.map(label=>({label:bar.tags.includes(label)?'✓ '+label:label+'待确认',ok:bar.tags.includes(label)}));
-    if(intent.budget!==null)matchTags.push({label:bar.price<=intent.budget?'✓ 预算内':'超预算 ¥'+(bar.price-intent.budget),ok:bar.price<=intent.budget});
-    matchTags.push({label:bar.distance<=2?'✓ 示例距离较近':'示例距离 '+bar.distance+'km · 稍远',ok:bar.distance<=2});
+    if(bar.price===null)matchTags.push({label:'价格待确认',ok:false});
+    else if(intent.budget!==null)matchTags.push({label:bar.price<=intent.budget?'✓ 预算内':'超预算 ¥'+(bar.price-intent.budget),ok:bar.price<=intent.budget});
+    if(bar.distance===null)matchTags.push({label:'距离待确认',ok:false});
+    else matchTags.push({label:bar.distance<=2?(bar.manual?'✓ 填写距离较近':'✓ 示例距离较近'):(bar.manual?'填写距离 ':'示例距离 ')+bar.distance+'km · 稍远',ok:bar.distance<=2});
     if(intent.dislike.includes('吵')&&bar.tags.includes('热闹')||intent.want.includes('安静')&&bar.tags.includes('现场音乐'))matchTags.push({label:'有音乐演出，可能偏吵',ok:false});
     const distanceWeight=mood==='tired'?5:mood==='hype'?.3:1.2;
-    const score=desired.filter(t=>bar.tags.includes(t)).length*9-bar.distance*(distanceWeight+(intent.want.includes('近一点')?3:0))-(intent.budget!==null?Math.max(0,bar.price-intent.budget)*.25:0)-intent.dislike.filter(t=>bar.tags.includes(t)).length*14+(mood==='hype'&&bar.tags.includes('热闹')?16:0);
+    const score=desired.filter(t=>bar.tags.includes(t)).length*9-(bar.distance===null?3:bar.distance)*(distanceWeight+(intent.want.includes('近一点')?3:0))-(intent.budget!==null&&bar.price!==null?Math.max(0,bar.price-intent.budget)*.25:0)-intent.dislike.filter(t=>bar.tags.includes(t)).length*14+(mood==='hype'&&bar.tags.includes('热闹')?16:0);
     return {...bar,matchTags,score};
   }
   async function match(intent,mood,candidates){
@@ -62,7 +64,7 @@ window.AI = (() => {
       if(!strings(result?.reasons)||result.reasons.length!==2||!result.reasons.every(r=>bar.notes.some(n=>n.text.includes(r)))||!bar.notes.some(n=>n.text===result.quote&&n.source===result.source))throw new Error('理由无法追溯到示例笔记，请重试。');
       return result;
     }
-    return {reasons:[bar.notes[0].text,bar.notes[1].text],quote:bar.notes[1].text,source:bar.notes[1].source};
+    const note=bar.notes[1]||bar.notes[0];return {reasons:bar.notes.slice(0,2).map(n=>n.text),quote:note.text,source:note.source};
   }
   return {USE_LLM,callModel,understand,match,persuade};
 })();

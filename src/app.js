@@ -1,86 +1,79 @@
 (() => {
   'use strict';
-  const $=id=>document.getElementById(id);
-  const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const screens=['input','mood','recommend','departure','checkin'];
-  const state={intent:null,mood:'chill',results:[],selected:null,seen:[],started:Date.now(),busy:false,run:0,record:null};
-  function show(name){screens.forEach(s=>$(s+'-screen').hidden=s!==name);$('progress').innerHTML=screens.map((s,i)=>`<span class="${i<=screens.indexOf(name)?'active':''}"></span>`).join('');window.scrollTo(0,0);const heading=$(name+'-screen').querySelector('h1');heading.tabIndex=-1;heading.focus({preventScroll:true});}
-  function tags(items){return items.map(x=>`<span class="tag">${escape(x)}</span>`).join('');}
-  function quick(){return [...$('quick-chips').querySelectorAll('[aria-pressed=true]')].map(x=>x.textContent);}
-  function invalidate(){state.intent=null;$('understood').hidden=true;$('understand').textContent='就这些，帮我挑 →';}
-  $('thought').addEventListener('input',invalidate);
-  $('quick-chips').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')!=='true');invalidate();});
-  $('example').onclick=()=>{$('thought').value=Samples.example;invalidate();};
-  $('understand').onclick=async()=>{
-    if(state.intent){$('intent-summary').innerHTML=tags([...state.intent.want,...state.intent.taste,...(state.intent.budget!==null?['人均 ¥'+state.intent.budget]:[])]);show('mood');return;}
-    const text=$('thought').value.trim();if(!text&&!quick().length){$('input-error').textContent='先说一点你的感受，或选一个快捷补充。';return;}
-    $('input-error').textContent='';$('understand').disabled=true;
-    try{state.intent=await AI.understand(text,quick());$('understood').innerHTML='<div class="card-heading"><h2>我听懂了</h2><button id="edit-intent" class="text-btn">改一改</button></div>'+[['不要',state.intent.dislike],['想要',state.intent.want],['口味',state.intent.taste],['预算',state.intent.budget!==null?['人均 ¥'+state.intent.budget]:[]]].map(([label,values])=>`<div class="intent-row"><span>${label}</span><div>${values.length?tags(values):'<span class="muted">未提及 · 待确认</span>'}</div></div>`).join('')+'<p class="muted">离线规则初步理解，请核对后继续；未识别的细节不会自动纳入推荐。</p>';$('understood').hidden=false;$('understand').textContent='理解对了，继续 →';$('edit-intent').onclick=()=>{invalidate();$('thought').focus();};$('understood').scrollIntoView({behavior:'smooth',block:'nearest'});}catch(e){$('input-error').textContent=e.message;}finally{$('understand').disabled=false;}
-  };
-  document.querySelectorAll('[data-mood]').forEach(b=>b.onclick=()=>{state.mood=b.dataset.mood;document.querySelectorAll('[data-mood]').forEach(x=>{const on=x===b;x.classList.toggle('selected',on);x.setAttribute('aria-pressed',on);});});
+  const $=id=>document.getElementById(id), esc=Flow.escape;
+  const screens=['pool','import','input','confirm','edit','mood','recommend','departure','checkin','negative','history'];
+  const state={screen:'pool',intent:null,mood:'chill',results:[],selected:null,seen:[],batches:[],batch:0,started:Date.now(),busy:false,run:0,record:null,pool:Samples.candidates.map(b=>b.id),custom:[],historyBack:'pool'};
+  const historyKey='tonight-checkins-v1', customKey='tonight-candidates-v1';
+  let history=[],storageOkay=true,recognition=null,recording=false,discardSpeech=false;
+  try {const saved=JSON.parse(localStorage.getItem(historyKey)||'[]');if(Array.isArray(saved))history=saved.filter(x=>x&&typeof x.id==='string'&&typeof x.date==='string'&&typeof x.bar==='string').slice(-100);}catch{storageOkay=false;}
+  try {const saved=JSON.parse(localStorage.getItem(customKey)||'[]');if(Array.isArray(saved))state.custom=saved.filter(b=>b&&b.manual&&typeof b.id==='string'&&typeof b.name==='string'&&typeof b.area==='string'&&Array.isArray(b.tags)&&b.tags.every(t=>typeof t==='string')&&Array.isArray(b.notes)&&b.notes.length&&b.notes.every(n=>typeof n.text==='string'&&typeof n.source==='string')&&(b.price===null||Number.isFinite(b.price))&&(b.distance===null||Number.isFinite(b.distance))).slice(-50);}catch{storageOkay=false;}
+  const all=()=>[...Samples.candidates,...state.custom];
+  const pool=()=>all().filter(b=>state.pool.includes(b.id));
+  const chosen=()=>state.results.find(b=>b.id===state.selected);
+  function save(){try{localStorage.setItem(historyKey,JSON.stringify(history.slice(-100)));storageOkay=true;}catch{storageOkay=false;}$('storage-status').textContent=storageOkay?'已保存在当前浏览器。':'浏览器存储不可用，本次记录仅在当前页面保留。';}
+  function stopVoice(){if(recognition){discardSpeech=true;try{recognition.abort();}catch{}recording=false;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','开始语音输入');$('voice-status').textContent='录音已取消，已有文字已保留。';}}
+  function show(name){if(name!==state.screen){state.run++;state.busy=false;}if(name!=='input')stopVoice();state.screen=name;screens.forEach(s=>$(s+'-screen').hidden=s!==name);const stage={pool:0,import:0,input:1,confirm:1,edit:1,mood:2,recommend:3,departure:4,checkin:5,negative:5,history:5}[name];$('progress').innerHTML=Array.from({length:6},(_,i)=>`<span class="${i<=stage?'active':''}"></span>`).join('');if(name==='pool')renderPool();window.scrollTo(0,0);const h=$(name+'-screen').querySelector('h1');h.tabIndex=-1;h.focus({preventScroll:true});}
   function dialog(title,html){$('dialog-title').textContent=title;$('dialog-content').innerHTML=html;$('detail-dialog').showModal();}
   $('close-dialog').onclick=()=>$('detail-dialog').close();
-  $('home').onclick=e=>{e.preventDefault();state.run++;show('input');};
-  const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  document.addEventListener('click',e=>{const go=e.target.closest('[data-go]');if(go)show(go.dataset.go);const action=e.target.closest('[data-action="history"]');if(action)openHistory();});
+  $('home').onclick=e=>{e.preventDefault();show('pool');};
+  function tags(items){return items.map(x=>`<span class="tag">${esc(x)}</span>`).join('');}
+  function renderPool(){const selected=pool();$('pool-count').textContent=`已选 ${selected.length} 家 · ${selected.reduce((n,b)=>n+b.notes.length,0)} 段笔记`;$('pool-list').innerHTML=all().map(b=>`<label class="pool-item"><input type="checkbox" value="${esc(b.id)}" ${state.pool.includes(b.id)?'checked':''}><span><strong>${esc(b.name)}</strong><small>${b.manual?'手动候选':'虚构示例'} · ${esc(Flow.meta(b))}</small></span></label>`).join('');}
+  $('pool-list').onchange=e=>{const id=e.target.value;if(e.target.checked)state.pool.push(id);else state.pool=state.pool.filter(x=>x!==id);renderPool();};
+  $('use-samples').onclick=()=>{state.pool=Samples.candidates.map(b=>b.id);renderPool();};
+  $('start-pool').onclick=()=>{if(pool().length<2){insufficient();return;}show('input');};
+  $('add-candidate').onclick=()=>show('import');
+  const features=['安静','cozy','能聊天','酒偏甜','现场音乐','热闹','适合 4 个人'];
+  $('import-tags').innerHTML=features.map(t=>`<button type="button" aria-pressed="false">${t}</button>`).join('');
+  for(const id of ['import-tags','quick-chips','feedback-reasons'])$(id).addEventListener('click',e=>{const b=e.target.closest('button');if(b){b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')!=='true');if(id==='quick-chips')invalidate();}});
+  $('parse-link').onclick=()=>{$('import-status').textContent='这条笔记暂时读不到：当前版本未接入链接解析。链接已保留，请手动补充店名和原文片段。';$('place-name').focus();};
+  $('import-form').onsubmit=e=>{e.preventDefault();try{const b=Flow.candidate({name:$('place-name').value,area:$('place-area').value,price:$('place-price').value,distance:$('place-distance').value,text:$('note-text').value,url:$('note-url').value,source:$('note-source').value,tags:[...$('import-tags').querySelectorAll('[aria-pressed=true]')].map(b=>b.textContent)},'manual-'+Date.now());state.custom.push(b);state.pool.push(b.id);try{localStorage.setItem(customKey,JSON.stringify(state.custom.slice(-50)));}catch{storageOkay=false;}$('import-error').textContent='';$('import-form').reset();$('import-tags').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed','false'));show('pool');if(!storageOkay)dialog('候选已加入本次体验','<p>浏览器存储不可用；当前候选在刷新或关闭页面后可能丢失。</p>');}catch(error){$('import-error').textContent=error.message||'请检查填写内容。';}};
+  function quick(){return [...$('quick-chips').querySelectorAll('[aria-pressed=true]')].map(x=>x.textContent);}
+  function invalidate(){state.intent=null;}
+  $('thought').addEventListener('input',invalidate);$('example').onclick=()=>{$('thought').value=Samples.example;invalidate();};
+  function renderIntent(){$('confirm-fields').innerHTML=[['不要',state.intent.dislike],['想要',state.intent.want],['口味',state.intent.taste],['预算',state.intent.budget===null?[]:['人均 ¥'+state.intent.budget]]].map(([label,values])=>`<div class="card tinted"><h2>${label}</h2><div class="chips">${values.length?tags(values):'<span class="muted">未提及 · 待确认</span>'}</div></div>`).join('');$('intent-summary').innerHTML=tags([...state.intent.want,...state.intent.taste,...(state.intent.budget===null?[]:['人均 ¥'+state.intent.budget])]);}
+  $('understand').onclick=async()=>{const text=$('thought').value.trim();if(!text&&!quick().length){$('input-error').textContent='先说一点你的感受，或选一个快捷补充。';return;}$('input-error').textContent='';$('understand').disabled=true;const run=state.run;try{const intent=await AI.understand(text,quick());if(run!==state.run)return;state.intent=intent;renderIntent();show('confirm');}catch(e){$('input-error').textContent=e.message;}finally{$('understand').disabled=false;}};
+  $('confirm-intent').onclick=()=>show('mood');
+  $('edit-fields').onclick=()=>{for(const k of ['dislike','want','taste'])$('edit-'+k).value=state.intent[k].join('，');$('edit-budget').value=state.intent.budget??'';show('edit');};
+  $('edit-form').onsubmit=e=>{e.preventDefault();try{const budget=Flow.number($('edit-budget').value,100000);state.intent={...state.intent,dislike:Flow.split($('edit-dislike').value),want:Flow.split($('edit-want').value),taste:Flow.split($('edit-taste').value),budget};renderIntent();show('mood');}catch(error){$('edit-error').textContent=error.message;}};
+  document.querySelectorAll('[data-mood]').forEach(b=>b.onclick=()=>{state.mood=b.dataset.mood;document.querySelectorAll('[data-mood]').forEach(x=>{const on=x===b;x.classList.toggle('selected',on);x.setAttribute('aria-pressed',on);});});
+  function notes(bar){dialog(bar.name+' · 笔记依据',bar.notes.map(n=>`<div class="quote">${esc(n.text)}<small>${esc(n.source)}</small>${/^https?:\/\//.test(n.url||'')?`<a href="${esc(n.url)}" target="_blank" rel="noopener noreferrer">打开你提供的原文链接 ↗</a>`:''}</div>`).join('')+`<p class="muted">${bar.manual?'用户手动提供，未抓取或独立核验。':'虚构样本，不对应真实小红书笔记。'}</p>`);}
   function renderResults(){
-    $('recommendations').innerHTML=state.results.map((b,i)=>`<article class="card bar-card ${b.id===state.selected?'selected':''}"><button class="bar-select" data-select="${b.id}" aria-expanded="${b.id===state.selected}"><span class="bar-heading"><strong>${escape(b.name)}</strong>${i===0?'<span class="pick">本批首选</span>':''}</span><span class="meta">${escape(b.area)} · 示例 ${b.distance}km · 人均 ¥${b.price}</span></button><div class="chips">${b.matchTags.map(t=>`<span class="tag ${t.ok?'match':'caution'}">${escape(t.label)}</span>`).join('')}</div>${b.id===state.selected?`<div class="reasons"><h3>为什么适合今晚的你 · 笔记依据</h3>${b.persuasion.reasons.map(r=>`<p>${escape(r)}</p>`).join('')}<blockquote class="quote">“${escape(b.persuasion.quote)}”<small>${escape(b.persuasion.source)}</small><button class="text-btn" data-note="${b.id}">看示例原笔记 ›</button></blockquote></div>`:`<p class="summary">${escape(b.notes[0].text)}</p>`}</article>`).join('');
-    const selected=state.results.find(b=>b.id===state.selected);$('choose').textContent='就去「'+selected.name+'」';
+    $('recommendations').innerHTML=state.results.map((b,i)=>`<article class="card bar-card ${b.id===state.selected?'selected':''}"><button class="bar-select" data-select="${esc(b.id)}" aria-expanded="${b.id===state.selected}"><span class="bar-heading"><strong>${esc(b.name)}</strong>${i===0?'<span class="pick">本批首选</span>':''}</span><span class="meta">${esc(Flow.meta(b))}</span></button><div class="chips">${b.matchTags.map(t=>`<span class="tag ${t.ok?'match':'caution'}">${esc(t.label)}</span>`).join('')}</div>${b.id===state.selected?`<div class="reasons"><h3>为什么适合今晚的你 · 笔记依据</h3>${b.persuasion.reasons.map(r=>`<p>${esc(r)}</p>`).join('')}<blockquote class="quote">“${esc(b.persuasion.quote)}”<small>${esc(b.persuasion.source)}</small><button class="text-btn" data-note="${esc(b.id)}">看原文片段 ›</button></blockquote></div>`:`<p class="summary">${esc(b.notes[0].text)}</p>`}</article>`).join('');
+    $('choose').textContent='就去「'+chosen().name+'」';const remaining=Flow.nextBatch(pool(),state.seen).length;$('batch-status').textContent=`第 ${state.batch+1} 批 · ${remaining>=2?'还有 '+remaining+' 家未比较':remaining===1?'仅剩 1 家，不凑出一批；可补充候选或回看已有批次':'已看完候选，可回看已有批次或补充候选'}`;$('previous-batch').hidden=state.batch===0;$('next-batch').hidden=state.batch===state.batches.length-1;$('refresh').disabled=remaining<2;
   }
-  function notes(bar){dialog(bar.name+' · 示例笔记',bar.notes.map(n=>`<div class="quote">${escape(n.text)}<small>${escape(n.source)}</small></div>`).join('')+'<p class="muted">虚构样本，不对应真实小红书笔记。</p>');}
-  $('recommendations').onclick=e=>{const pick=e.target.closest('[data-select]'),note=e.target.closest('[data-note]');if(pick){state.selected=pick.dataset.select;renderResults();}if(note)notes(state.results.find(b=>b.id===note.dataset.note));};
-  async function recommend(refresh=false){
-    const run=++state.run;state.busy=true;show('recommend');$('loading').hidden=false;$('recommendations').innerHTML='';$('recommend-actions').hidden=true;$('recommend-error').hidden=true;
-    let candidates=Samples.candidates.filter(b=>!refresh||!state.seen.includes(b.id));
-    if(candidates.length<2){state.seen=[];candidates=Samples.candidates;}
-    $('recommend-subtitle').textContent=`在 ${candidates.length} 家示例候选、${candidates.reduce((n,b)=>n+b.notes.length,0)} 段示例笔记中，为你找下一站。`;
-    try{
-      for(const step of ['正在读你的吐槽','正在翻 '+candidates.reduce((n,b)=>n+b.notes.length,0)+' 段示例笔记','正在按你此刻的状态排序']){$('loading-text').textContent=step;await pause(600);if(run!==state.run)return;}
-      const matched=await AI.match(state.intent,state.mood,candidates);
-      const results=await Promise.all(matched.map(async b=>({...b,persuasion:await AI.persuade(state.intent,b)})));
-      if(run!==state.run)return;state.results=results;state.selected=results[0].id;state.seen.push(...results.map(b=>b.id));renderResults();$('recommend-actions').hidden=false;
-    }catch(e){if(run===state.run){$('recommend-error-text').textContent=e.message||'生成失败，请再试一次。';$('recommend-error').hidden=false;}}
-    finally{if(run===state.run){state.busy=false;$('loading').hidden=true;}}
+  $('recommendations').onclick=e=>{const pick=e.target.closest('[data-select]'),note=e.target.closest('[data-note]');if(pick){state.selected=pick.dataset.select;state.batches[state.batch].selected=state.selected;renderResults();}if(note)notes(state.results.find(b=>b.id===note.dataset.note));};
+  function restoreBatch(index){state.batch=index;state.results=state.batches[index].results;state.selected=state.batches[index].selected;renderResults();}
+  $('previous-batch').onclick=()=>restoreBatch(state.batch-1);$('next-batch').onclick=()=>restoreBatch(state.batch+1);
+  function insufficient(){dialog('合适的候选还不够','<p>当前候选不足 2 家，不用不确定的结果凑数。你的原始吐槽和偏好都保留着。</p><div class="actions"><button id="insufficient-pool" class="primary">返回候选池</button><button id="insufficient-add" class="secondary">补充候选笔记</button></div>');$('insufficient-pool').onclick=()=>{$('detail-dialog').close();show('pool');};$('insufficient-add').onclick=()=>{$('detail-dialog').close();show('import');};}
+  const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  async function recommend(refresh=false,simulate=false){
+    if(state.busy)return;if(!state.intent){show('input');return;}const candidates=refresh?Flow.nextBatch(pool(),state.seen):pool();if(candidates.length<2){insufficient();return;}
+    show('recommend');const run=++state.run;state.busy=true;$('loading').hidden=false;$('recommendations').innerHTML='';$('recommend-actions').hidden=true;$('recommend-error').hidden=true;$('batch-status').textContent='';$('previous-batch').hidden=$('next-batch').hidden=true;
+    $('recommend-subtitle').textContent=`在 ${candidates.length} 家候选、${candidates.reduce((n,b)=>n+b.notes.length,0)} 段笔记中，为你找下一站。`;
+    try{for(const step of ['已读懂你的吐槽','正在核对候选里的笔记原文','正在结合此刻状态排序']){$('loading-text').textContent=step;await pause(400);if(run!==state.run)return;}if(simulate)throw new Error('演示：生成暂时失败，你的吐槽和偏好都还在。');const matched=await AI.match(state.intent,state.mood,candidates);const results=await Promise.all(matched.map(async b=>({...b,persuasion:await AI.persuade(state.intent,b)})));if(run!==state.run)return;if(!refresh){state.batches=[];state.seen=[];}state.results=results;state.selected=results[0].id;state.seen.push(...results.map(b=>b.id));state.batches.push({results,selected:state.selected});state.batch=state.batches.length-1;renderResults();$('recommend-actions').hidden=false;}catch(e){if(run===state.run){$('recommend-error-text').textContent=e.message||'生成失败，请重试。';$('recommend-error').hidden=false;}}finally{if(run===state.run){state.busy=false;$('loading').hidden=true;}}
   }
-  $('recommend').onclick=()=>{state.seen=[];recommend();};
-  $('skip').onclick=()=>{state.mood='chill';document.querySelectorAll('[data-mood]').forEach(b=>{const on=b.dataset.mood==='chill';b.classList.toggle('selected',on);b.setAttribute('aria-pressed',on);});state.seen=[];recommend();};
+  $('recommend').onclick=()=>recommend();$('skip').onclick=()=>{state.mood='chill';document.querySelectorAll('[data-mood]').forEach(b=>{const on=b.dataset.mood==='chill';b.classList.toggle('selected',on);b.setAttribute('aria-pressed',on);});recommend();};
   $('refresh').onclick=()=>recommend(true);$('retry').onclick=()=>recommend();$('revise').onclick=()=>show('input');
-  const chosen=()=>state.results.find(b=>b.id===state.selected);
-  $('choose').onclick=()=>{
-    const b=chosen();state.record=null;$('departure-title').textContent='今晚，就去'+b.name+'。';
-    const seconds=Math.max(1,Math.round((Date.now()-state.started)/1000));$('elapsed').textContent=`从吐槽到拍板，用了 ${Math.floor(seconds/60)} 分 ${seconds%60} 秒。`;
-    $('chosen-card').innerHTML=`<div class="card"><div class="art" aria-hidden="true">${b.art}</div><h2>${escape(b.name)}</h2><p class="meta">${escape(b.area)} · 示例 ${b.distance}km · 人均 ¥${b.price}</p><div class="chips">${tags(b.tags.slice(0,3))}</div><p class="muted">到店前的小提醒：${escape(b.notes[2].text)}</p></div>`;show('departure');
-  };
-  $('notes').onclick=()=>notes(chosen());
-  $('map').onclick=()=>dialog('导航尚未接入','<p>这是虚构店铺，不提供真实导航。正式版本需接入真实地址，并在出发前确认营业时间、价格和座位。</p>');
-  $('share').onclick=()=>dialog('发给朋友 · 文案预览',`<p>今晚想去「${escape(chosen().name)}」，${escape(chosen().notes[0].text)}</p><p class="muted">演示文案，请自行复制；这里不会发送消息。店铺为虚构样本。</p>`);
+  $('choose').onclick=()=>{const b=chosen();state.record=null;$('departure-title').textContent='今晚，就去'+b.name+'。';const seconds=Math.max(1,Math.round((Date.now()-state.started)/1000));$('elapsed').textContent=`从吐槽到拍板，用了 ${Math.floor(seconds/60)} 分 ${seconds%60} 秒。`;$('chosen-card').innerHTML=`<div class="card"><div class="art" aria-hidden="true">${esc(b.art)}</div><h2>${esc(b.name)}</h2><p class="meta">${esc(Flow.meta(b))}</p><div class="chips">${tags(b.tags.slice(0,3))}</div><p class="muted">出发前请确认营业时间、位置与座位。${esc(b.notes[2]?.text||'未提供的信息仍待确认。')}</p></div>`;show('departure');};
+  $('notes').onclick=()=>notes(chosen());$('map').onclick=()=>dialog('地图导航待接入','<p>当前未接入已验证的地址与地图服务。请根据原文核对真实店名和地址，再自行导航。示例店铺不生成真实路线。</p>');
+  $('share').onclick=()=>{const b=chosen();dialog('发给朋友 · 文案预览',`<p id="share-copy-text">今晚想去「${esc(b.name)}」。${esc(b.notes[0].text)}${b.manual?'（手动候选，出发前请核对）':'（虚构示例，请勿据此出行）'}</p><button id="copy-share" class="primary">复制文案</button><p id="copy-status" class="muted" role="status">由你确认后发送，不会自动发给朋友。</p>`);$('copy-share').onclick=async()=>{try{await navigator.clipboard.writeText($('share-copy-text').textContent);$('copy-status').textContent='已复制，由你自行发送。';}catch{$('copy-status').textContent='复制不可用，请手动选择上方文字复制。';}};};
   $('back-results').onclick=()=>show('recommend');
-  const storageKey='tonight-checkins-v1';let history=[],storageOkay=true;
-  try{const saved=JSON.parse(localStorage.getItem(storageKey)||'[]');if(Array.isArray(saved))history=saved.filter(x=>x&&typeof x.id==='string'&&typeof x.date==='string'&&typeof x.bar==='string').slice(-100);}catch{storageOkay=false;}
-  function save(){try{localStorage.setItem(storageKey,JSON.stringify(history.slice(-100)));}catch{storageOkay=false;}$('storage-status').textContent=storageOkay?'已保存在当前浏览器。':'浏览器存储不可用，本次记录仅在当前页面保留。';}
   function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
-  $('checkin').onclick=()=>{
-    const now=new Date(),b=chosen();if(!state.record){state.record={id:String(Date.now())+'-'+Math.random().toString(36).slice(2),date:dateKey(now),bar:b.id,feedback:null};history.push(state.record);save();}
-    const monday=new Date(now);monday.setDate(now.getDate()-(now.getDay()+6)%7);monday.setHours(0,0,0,0);
-    $('week').innerHTML=['一','二','三','四','五','六','日'].map((day,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);const done=history.some(r=>r.date===dateKey(d));return `<div class="day ${done?'done':''}">周${day}<span aria-label="${dateKey(d)} ${done?'已打卡':'未打卡'}">${done?'✓':d.getDate()}</span></div>`;}).join('');
-    const count=history.filter(r=>r.date>=dateKey(monday)&&r.date<=dateKey(now)).length;$('streak').textContent=`本周已果断决定 ${count} 次 · ${count>=3?'已解锁「不纠结」徽章':'再 '+(3-count)+' 次解锁「不纠结」徽章'}`;
-    $('collection').innerHTML=`<small>YOUR NIGHT COLLECTION / ${String(history.length).padStart(2,'0')}</small><h2>${escape(b.name)}</h2><p>已存入本机「深圳夜晚地图」· 示例集卡</p>`;
-    document.querySelectorAll('[data-feedback]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.feedback===state.record.feedback)));$('feedback-message').textContent='每一次反馈，都让下一次更有方向。';Mascot.reset();show('checkin');
-  };
-  $('feedback').onclick=e=>{const b=e.target.closest('[data-feedback]');if(!b||!state.record)return;state.record.feedback=b.dataset.feedback;Mascot.feedback(b.dataset.feedback);save();document.querySelectorAll('[data-feedback]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));$('feedback-message').textContent=b.dataset.feedback==='bad'?'已记下这次不合口味。产品设想：3 天后回访并提供饮品券；本 Demo 尚未接入通知和发券。':'反馈已记录。正式接入个性化后，可用来调整下次推荐。';};
-  $('finish').onclick=()=>{Mascot.reset();state.started=Date.now();state.record=null;state.results=[];state.seen=[];$('thought').value='';document.querySelectorAll('#quick-chips button').forEach(b=>b.setAttribute('aria-pressed','false'));invalidate();show('input');};
-  const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;let recognition=null,recording=false;
+  function feedbackMessage(){const value=state.record?.feedback;$('feedback-message').textContent=value==='bad'?'这次不合口味已记下。你的判断比推荐重要。':value?'反馈已记录，不会自动推断长期喜好。':'每一次反馈，都让下一次更有方向。';document.querySelectorAll('[data-feedback]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.feedback===value)));}
+  $('checkin').onclick=()=>{const now=new Date(),b=chosen();if(!state.record){state.record={id:Date.now()+'-'+Math.random().toString(36).slice(2),date:dateKey(now),bar:b.id,name:b.name,notes:b.notes,manual:!!b.manual,feedback:null,reasons:[],comment:''};history=Flow.saveRecord(history,state.record);save();}const monday=new Date(now);monday.setDate(now.getDate()-(now.getDay()+6)%7);monday.setHours(0,0,0,0);$('week').innerHTML=['一','二','三','四','五','六','日'].map((day,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);const done=history.some(r=>r.date===dateKey(d));return `<div class="day ${done?'done':''}">周${day}<span aria-label="${dateKey(d)} ${done?'已打卡':'未打卡'}">${done?'✓':d.getDate()}</span></div>`;}).join('');const count=history.filter(r=>r.date>=dateKey(monday)&&r.date<=dateKey(now)).length;$('streak').textContent=`本周已果断决定 ${count} 次 · ${count>=3?'已解锁「不纠结」徽章':'再 '+(3-count)+' 次解锁「不纠结」徽章'}`;$('collection').innerHTML=`<small>YOUR NIGHT COLLECTION / ${String(history.length).padStart(2,'0')}</small><h2>${esc(b.name)}</h2><p>${storageOkay?'已保存在本机':'仅保留在本次页面'} · ${b.manual?'手动候选':'示例集卡'}</p><button data-action="history" class="text-btn">查看我的全部集卡 ↗</button>`;feedbackMessage();Mascot.reset();if(state.record.feedback)Mascot.feedback(state.record.feedback);show('checkin');};
+  $('feedback-reasons').innerHTML=['太吵','口味不对','超预算','描述不符','其他'].map(t=>`<button aria-pressed="false">${t}</button>`).join('');
+  $('feedback').onclick=e=>{const b=e.target.closest('[data-feedback]');if(!b||!state.record)return;state.record.feedback=b.dataset.feedback;if(b.dataset.feedback!=='bad'){state.record.reasons=[];state.record.comment='';}save();feedbackMessage();Mascot.feedback(b.dataset.feedback);if(b.dataset.feedback==='bad'){$('feedback-reasons').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String((state.record.reasons||[]).includes(x.textContent))));$('feedback-other').value=state.record.comment||'';show('negative');}};
+  $('save-negative').onclick=()=>{state.record.reasons=[...$('feedback-reasons').querySelectorAll('[aria-pressed=true]')].map(x=>x.textContent);state.record.comment=$('feedback-other').value.trim();save();openHistory();};
+  $('skip-negative').onclick=()=>openHistory();
+  $('followup-preview').onclick=()=>dialog('过了几天，想问问你','<div class="tag">未来回访概念 · 尚未启用</div><p>上次哪里没合口味：氛围、口味，还是描述与现场不同？</p><p>回访需你授权通知；饮品券需真实合作商户、适用范围与期限。当前没有预约回访、发券或发送通知。</p><p class="muted">未来需要提供暂不回答、关闭回访与删除反馈的控制。</p>');
+  function openHistory(){if(state.screen!=='history')state.historyBack=state.screen;$('history-storage').textContent=storageOkay?'记录保存在当前浏览器，不跨设备同步。':'存储受限，部分记录只在当前页面保留。';$('history-list').innerHTML=history.length?[...history].reverse().map(r=>`<article class="card"><small class="meta">${esc(r.date)} · ${r.manual?'手动候选':'虚构示例'}</small><h2>${esc(r.name||all().find(b=>b.id===r.bar)?.name||'一次夜晚决定')}</h2><p class="muted">${esc(({good:'合我口味',okay:'还行',bad:'不太行'})[r.feedback]||'暂未评价')}${r.reasons?.length?' · '+r.reasons.map(esc).join(' / '):''}</p>${r.comment?`<p>${esc(r.comment)}</p>`:''}<button class="text-btn" data-history="${esc(r.id)}">查看来源与记录 ↗</button></article>`).join(''):'<div class="card empty-state"><span>✳</span><h2>你的第一张夜晚卡，等你决定。</h2><p class="muted">还没有打卡记录，不预填历史或成就。</p></div>';show('history');}
+  $('history-list').onclick=e=>{const b=e.target.closest('[data-history]');if(!b)return;const r=history.find(x=>x.id===b.dataset.history),bar=all().find(x=>x.id===r.bar);dialog(r.name||bar?.name||'决定记录',`<p>${esc(r.date)} · ${esc(({good:'合我口味',okay:'还行',bad:'不太行'})[r.feedback]||'暂未评价')}</p>`+(r.notes||bar?.notes||[]).map(n=>`<div class="quote">${esc(n.text)}<small>${esc(n.source)}</small></div>`).join(''));};
+  $('history-back').onclick=()=>show(state.historyBack);$('finish').onclick=$('skip-feedback').onclick=()=>openHistory();
+  $('new-decision').onclick=()=>{Mascot.reset();state.started=Date.now();state.record=null;state.intent=null;state.results=[];state.batches=[];state.seen=[];$('thought').value='';$('quick-chips').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed','false'));show('pool');};
+  const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!Speech){$('voice').disabled=true;$('voice-status').textContent='当前浏览器不支持语音，请直接输入文字。';}
-  else{
-    $('voice-status').textContent='可点击语音输入；识别服务取决于浏览器和网络。';
-    $('voice').onclick=()=>{
-      if(recording){recognition.stop();return;}
-      recognition=new Speech();recognition.lang='zh-CN';recognition.interimResults=false;
-      recognition.onstart=()=>{recording=true;$('voice').classList.add('recording');$('voice').setAttribute('aria-label','停止语音输入');$('voice-status').textContent='正在听，点击按钮结束……';};
-      recognition.onresult=e=>{$('thought').value+=Array.from(e.results).map(r=>r[0].transcript).join('');invalidate();$('voice-status').textContent='语音已转文字，请核对后继续。';};
-      recognition.onerror=()=>{$('voice-status').textContent='语音暂不可用或权限未开启，请直接输入文字。';};
-      recognition.onend=()=>{recording=false;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','开始语音输入');if($('voice-status').textContent.startsWith('正在听'))$('voice-status').textContent='录音已结束，可重新录制或输入文字。';};
-      try{recognition.start();}catch{$('voice-status').textContent='语音启动失败，请直接输入文字。';}
-    };
-  }
-  show('input');
+  else{$('voice-status').textContent='点击语音输入；识别依赖浏览器和网络。离开此页会停止录音。';$('voice').onclick=()=>{if(recording){recognition.stop();return;}discardSpeech=false;recognition=new Speech();recognition.lang='zh-CN';recognition.interimResults=false;recognition.onstart=()=>{if(state.screen!=='input'){discardSpeech=true;recognition.abort();return;}recording=true;$('voice').classList.add('recording');$('voice').setAttribute('aria-label','结束录音');$('voice-status').textContent='正在听，你慢慢说。点击结束后可修改文字。';};recognition.onresult=e=>{if(discardSpeech||state.screen!=='input')return;$('thought').value+=Array.from(e.results).map(r=>r[0].transcript).join('');invalidate();$('voice-status').textContent='语音已转文字，请核对后继续。';};recognition.onerror=()=>{if(!discardSpeech)$('voice-status').textContent='这次没能听清：权限或识别服务不可用。已有文字保留，可以直接打字或重新尝试。';};recognition.onend=()=>{recording=false;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','开始语音输入');};try{recognition.start();}catch{$('voice-status').textContent='语音启动失败，请直接输入文字。';}};}
+  document.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{if(b.dataset.demo==='generation'){if(!state.intent){dialog('先准备偏好','<p>先完成吐槽与偏好核对，再演示生成失败和重试。</p>');return;}recommend(false,true);}if(b.dataset.demo==='insufficient')insufficient();if(b.dataset.demo==='voice')dialog('这次没能听清 · 演示','<p>权限或识别不可用时，保留已有输入，改用文字。你也可以返回输入页主动重试录音。</p>');if(b.dataset.demo==='storage')dialog('记录暂时存不下来 · 演示','<p>浏览器禁用存储或容量不足时，决定仍已完成，无需重走流程。本次记录只保留在当前页面。真实保存失败时，打卡页和集卡页都会显示同样的存储提示。</p>');});
+  renderPool();show('pool');
 })();
