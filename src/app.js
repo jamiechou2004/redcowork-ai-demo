@@ -64,10 +64,10 @@
     $('week').innerHTML=['一','二','三','四','五','六','日'].map((day,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);const done=history.some(r=>r.date===dateKey(d));return `<div class="day ${done?'done':''}">周${day}<span aria-label="${dateKey(d)} ${done?'已打卡':'未打卡'}">${done?'✓':d.getDate()}</span></div>`;}).join('');
     const count=history.filter(r=>r.date>=dateKey(monday)&&r.date<=dateKey(now)).length;$('streak').textContent=`本周已果断决定 ${count} 次 · ${count>=3?'已解锁「不纠结」徽章':'再 '+(3-count)+' 次解锁「不纠结」徽章'}`;
     $('collection').innerHTML=`<small>YOUR NIGHT COLLECTION / ${String(history.length).padStart(2,'0')}</small><h2>${escape(b.name)}</h2><p>已存入本机「深圳夜晚地图」· 示例集卡</p>`;
-    document.querySelectorAll('[data-feedback]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.feedback===state.record.feedback)));$('feedback-message').textContent='每一次反馈，都让下一次更有方向。';show('checkin');
+    document.querySelectorAll('[data-feedback]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.feedback===state.record.feedback)));$('feedback-message').textContent='每一次反馈，都让下一次更有方向。';Mascot.reset();show('checkin');
   };
-  $('feedback').onclick=e=>{const b=e.target.closest('[data-feedback]');if(!b||!state.record)return;state.record.feedback=b.dataset.feedback;save();document.querySelectorAll('[data-feedback]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));$('feedback-message').textContent=b.dataset.feedback==='bad'?'已记下这次不合口味。产品设想：3 天后回访并提供饮品券；本 Demo 尚未接入通知和发券。':'反馈已记录。正式接入个性化后，可用来调整下次推荐。';};
-  $('finish').onclick=()=>{state.started=Date.now();state.record=null;state.results=[];state.seen=[];$('thought').value='';document.querySelectorAll('#quick-chips button').forEach(b=>b.setAttribute('aria-pressed','false'));invalidate();show('input');};
+  $('feedback').onclick=e=>{const b=e.target.closest('[data-feedback]');if(!b||!state.record)return;state.record.feedback=b.dataset.feedback;Mascot.feedback(b.dataset.feedback);save();document.querySelectorAll('[data-feedback]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));$('feedback-message').textContent=b.dataset.feedback==='bad'?'已记下这次不合口味。产品设想：3 天后回访并提供饮品券；本 Demo 尚未接入通知和发券。':'反馈已记录。正式接入个性化后，可用来调整下次推荐。';};
+  $('finish').onclick=()=>{Mascot.reset();state.started=Date.now();state.record=null;state.results=[];state.seen=[];$('thought').value='';document.querySelectorAll('#quick-chips button').forEach(b=>b.setAttribute('aria-pressed','false'));invalidate();show('input');};
   const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;let recognition=null,recording=false;
   if(!Speech){$('voice').disabled=true;$('voice-status').textContent='当前浏览器不支持语音，请直接输入文字。';}
   else{
