@@ -54,5 +54,33 @@
   $('map').onclick=()=>dialog('导航尚未接入','<p>这是虚构店铺，不提供真实导航。正式版本需接入真实地址，并在出发前确认营业时间、价格和座位。</p>');
   $('share').onclick=()=>dialog('发给朋友 · 文案预览',`<p>今晚想去「${escape(chosen().name)}」，${escape(chosen().notes[0].text)}</p><p class="muted">演示文案，请自行复制；这里不会发送消息。店铺为虚构样本。</p>`);
   $('back-results').onclick=()=>show('recommend');
+  const storageKey='tonight-checkins-v1';let history=[],storageOkay=true;
+  try{const saved=JSON.parse(localStorage.getItem(storageKey)||'[]');if(Array.isArray(saved))history=saved.filter(x=>x&&typeof x.id==='string'&&typeof x.date==='string'&&typeof x.bar==='string').slice(-100);}catch{storageOkay=false;}
+  function save(){try{localStorage.setItem(storageKey,JSON.stringify(history.slice(-100)));}catch{storageOkay=false;}$('storage-status').textContent=storageOkay?'已保存在当前浏览器。':'浏览器存储不可用，本次记录仅在当前页面保留。';}
+  function dateKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+  $('checkin').onclick=()=>{
+    const now=new Date(),b=chosen();if(!state.record){state.record={id:String(Date.now())+'-'+Math.random().toString(36).slice(2),date:dateKey(now),bar:b.id,feedback:null};history.push(state.record);save();}
+    const monday=new Date(now);monday.setDate(now.getDate()-(now.getDay()+6)%7);monday.setHours(0,0,0,0);
+    $('week').innerHTML=['一','二','三','四','五','六','日'].map((day,i)=>{const d=new Date(monday);d.setDate(d.getDate()+i);const done=history.some(r=>r.date===dateKey(d));return `<div class="day ${done?'done':''}">周${day}<span aria-label="${dateKey(d)} ${done?'已打卡':'未打卡'}">${done?'✓':d.getDate()}</span></div>`;}).join('');
+    const count=history.filter(r=>r.date>=dateKey(monday)&&r.date<=dateKey(now)).length;$('streak').textContent=`本周已果断决定 ${count} 次 · ${count>=3?'已解锁「不纠结」徽章':'再 '+(3-count)+' 次解锁「不纠结」徽章'}`;
+    $('collection').innerHTML=`<small>YOUR NIGHT COLLECTION / ${String(history.length).padStart(2,'0')}</small><h2>${escape(b.name)}</h2><p>已存入本机「深圳夜晚地图」· 示例集卡</p>`;
+    document.querySelectorAll('[data-feedback]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.feedback===state.record.feedback)));$('feedback-message').textContent='每一次反馈，都让下一次更有方向。';show('checkin');
+  };
+  $('feedback').onclick=e=>{const b=e.target.closest('[data-feedback]');if(!b||!state.record)return;state.record.feedback=b.dataset.feedback;save();document.querySelectorAll('[data-feedback]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));$('feedback-message').textContent=b.dataset.feedback==='bad'?'已记下这次不合口味。产品设想：3 天后回访并提供饮品券；本 Demo 尚未接入通知和发券。':'反馈已记录。正式接入个性化后，可用来调整下次推荐。';};
+  $('finish').onclick=()=>{state.started=Date.now();state.record=null;state.results=[];state.seen=[];$('thought').value='';document.querySelectorAll('#quick-chips button').forEach(b=>b.setAttribute('aria-pressed','false'));invalidate();show('input');};
+  const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;let recognition=null,recording=false;
+  if(!Speech){$('voice').disabled=true;$('voice-status').textContent='当前浏览器不支持语音，请直接输入文字。';}
+  else{
+    $('voice-status').textContent='可点击语音输入；识别服务取决于浏览器和网络。';
+    $('voice').onclick=()=>{
+      if(recording){recognition.stop();return;}
+      recognition=new Speech();recognition.lang='zh-CN';recognition.interimResults=false;
+      recognition.onstart=()=>{recording=true;$('voice').classList.add('recording');$('voice').setAttribute('aria-label','停止语音输入');$('voice-status').textContent='正在听，点击按钮结束……';};
+      recognition.onresult=e=>{$('thought').value+=Array.from(e.results).map(r=>r[0].transcript).join('');invalidate();$('voice-status').textContent='语音已转文字，请核对后继续。';};
+      recognition.onerror=()=>{$('voice-status').textContent='语音暂不可用或权限未开启，请直接输入文字。';};
+      recognition.onend=()=>{recording=false;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','开始语音输入');if($('voice-status').textContent.startsWith('正在听'))$('voice-status').textContent='录音已结束，可重新录制或输入文字。';};
+      try{recognition.start();}catch{$('voice-status').textContent='语音启动失败，请直接输入文字。';}
+    };
+  }
   show('input');
 })();
