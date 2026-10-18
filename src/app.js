@@ -44,5 +44,15 @@
   $('recommend').onclick=()=>{state.seen=[];recommend();};
   $('skip').onclick=()=>{state.mood='chill';document.querySelectorAll('[data-mood]').forEach(b=>{const on=b.dataset.mood==='chill';b.classList.toggle('selected',on);b.setAttribute('aria-pressed',on);});state.seen=[];recommend();};
   $('refresh').onclick=()=>recommend(true);$('retry').onclick=()=>recommend();$('revise').onclick=()=>show('input');
+  const chosen=()=>state.results.find(b=>b.id===state.selected);
+  $('choose').onclick=()=>{
+    const b=chosen();state.record=null;$('departure-title').textContent='今晚，就去'+b.name+'。';
+    const seconds=Math.max(1,Math.round((Date.now()-state.started)/1000));$('elapsed').textContent=`从吐槽到拍板，用了 ${Math.floor(seconds/60)} 分 ${seconds%60} 秒。`;
+    $('chosen-card').innerHTML=`<div class="card"><div class="art" aria-hidden="true">${b.art}</div><h2>${escape(b.name)}</h2><p class="meta">${escape(b.area)} · 示例 ${b.distance}km · 人均 ¥${b.price}</p><div class="chips">${tags(b.tags.slice(0,3))}</div><p class="muted">到店前的小提醒：${escape(b.notes[2].text)}</p></div>`;show('departure');
+  };
+  $('notes').onclick=()=>notes(chosen());
+  $('map').onclick=()=>dialog('导航尚未接入','<p>这是虚构店铺，不提供真实导航。正式版本需接入真实地址，并在出发前确认营业时间、价格和座位。</p>');
+  $('share').onclick=()=>dialog('发给朋友 · 文案预览',`<p>今晚想去「${escape(chosen().name)}」，${escape(chosen().notes[0].text)}</p><p class="muted">演示文案，请自行复制；这里不会发送消息。店铺为虚构样本。</p>`);
+  $('back-results').onclick=()=>show('recommend');
   show('input');
 })();
