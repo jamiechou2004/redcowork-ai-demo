@@ -19,7 +19,7 @@ window.Locale=(()=>{
   const rules=[[/\b(?:too loud|too noisy|can't (?:hear|talk)|cannot (?:hear|talk))\b/gi,'太吵了'],[/\b(?:quiet|quieter|peaceful)\b/gi,'安静'],[/\b(?:chat|talk|conversation)\b/gi,'聊天'],[/\b(?:dance|dancing|clubbing|club|lively|livelier|energetic)\b/gi,'热闹'],[/\b(?:live music|live band|gig)\b/gi,'现场音乐'],[/\b(?:hungry|food|eat|meal|snacks?)\b/gi,'吃东西'],[/\b(?:too far|closer|nearby|near me|walking distance|close by)\b/gi,'近一点'],[/\b(?:sweet|sweeter)\b/gi,'酒偏甜'],[/\b(?:too expensive|cheaper|lower budget|cheap|affordable)\b/gi,'预算友好'],[/\b(?:crowded|fewer people)\b/gi,'人少一点'],[/\b(?:games?|board games?)\b/gi,'能玩游戏'],[/\b(?:low alcohol|low abv)\b/gi,'低度一点'],[/\b(?:no alcohol|non-alcoholic|don't drink)\b/gi,'不喝酒'],[/\b(?:signature cocktails?)\b/gi,'有特调'],[/\b(?:dim lighting|dim lights?)\b/gi,'灯光暗一点'],[/\b(?:hotel bar|hotel-bar)\b/gi,'不要酒店风'],[/\b(?:no budget limit|unlimited budget|budget doesn't matter)\b/gi,'预算无所谓'],[/\b(?:four|4)\s*(?:people|of us|friends)\b/gi,'4 个人'],[/\b(?:two|2)\s*(?:people|of us|friends)\b/gi,'2 个人']];
   for(const [r,v]of rules)s=s.replace(r,v);
   s=s.replace(/(?:CNY|RMB|budget(?: of)?|under|around|up to)\s*(\d+)/gi,'预算$1').replace(/\b(\d+)\s*(?:each|per person|a head)\b/gi,'人均$1');
-  return s;
+  return s.replace(/预算友好/g,'便宜');
  }
  const langLink=document.createElement('a');langLink.className='language-switch';const url=new URL(location.href);if(en)url.searchParams.delete('lang');else url.searchParams.set('lang','en');langLink.href=url.href;langLink.textContent=en?'中文':'EN';langLink.lang=en?'zh-CN':'en';langLink.setAttribute('aria-label',en?'Switch to Chinese':'Switch to English');document.querySelector('.topbar nav').prepend(langLink);
  if(!en)return {en,text,normalize};
