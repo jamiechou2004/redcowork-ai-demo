@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
+const source=fs.readFileSync('src/app.js','utf8');const code=source.slice(source.indexOf(' async function goToTest('),source.indexOf(' async function run('));
+function setup(stage='celebrate',hasHistory=true){
+ const intent={want:['安静'],dislike:[],taste:[],budget:200},card={type:'recommend',intent,mood:'chill',results:[{id:'a',name:'A'},{id:'b',name:'B'}],selected:'a',readonly:true};
+ const state={stage,record:{id:'saved-checkin'},intent:null,active:{id:99},pool:[]},messages=hasHistory?[{role:'ai',card}]:[];let marks=0;const target={classList:{remove(){},add(){}},focus(){this.focused=true},scrollIntoView(){},offsetWidth:1};const nodes={draft:{value:'old draft',focus(){this.focused=true},classList:target.classList,offsetWidth:1}};
+ const ctx=vm.createContext({state,messages,structuredClone,Number,voice:{cancel(){}},$:id=>nodes[id],thread:{querySelector:()=>({querySelector:()=>target})},consume(){state.active=null},async emit(){state.active={id:messages.length};messages.push({role:'ai',card:{type:state.stage}})},refreshSuggestions(){},scrollBottom(){},toast(){},Samples:{example:'示例',candidates:[{id:'a'},{id:'b'}]},AI:{async understand(){return structuredClone(intent)}},pool:()=>[],async pushAI(){},async recommend(){state.stage='recommend';state.results=[{id:'a'}];state.active={id:42}},reviewer:{track(){marks++},resetTests(){throw Error('must preserve progress')}}});vm.runInContext(code,ctx);return{ctx,state,messages,card,nodes,target,get marks(){return marks},run:(i,d='')=>ctx.goToTest(i,d)};
+}
+(async()=>{let t=setup();await t.run(2);assert.equal(t.state.stage,'recommend');assert.equal(t.state.selected,'a');assert.equal(t.card.readonly,true);assert.notEqual(t.state.results,t.card.results);assert(t.target.focused);assert.equal(t.marks,0);
+t=setup();await t.run(3);assert.equal(t.state.stage,'recommend');assert.equal(t.nodes.draft.value,'太远了');assert(t.nodes.draft.focused);assert.equal(t.marks,0);
+t=setup();await t.run(1,'想蹦迪');assert.equal(t.state.stage,'complaint');assert.equal(t.nodes.draft.value,'想蹦迪');assert.equal(t.messages[0].card.type,'recommend');assert.equal(t.state.intent,null);
+t=setup('context',false);await t.run(4);assert.equal(t.state.stage,'recommend');assert.equal(t.marks,0);assert.equal(t.state.pool.length,2);
+console.log('PASS reviewer navigation after checkin, editable recommendation snapshot, draft routing, progress preservation and first-visit fallback');})().catch(e=>{console.error(e);process.exitCode=1});
