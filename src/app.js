@@ -1,5 +1,6 @@
 (() => {
  'use strict';
+ const L=window.Locale||{text:x=>x,normalize:x=>x,en:false};
  const $=id=>document.getElementById(id),esc=Flow.escape,thread=$('thread');
  const messages=[];let reviewer;
  const moods={tired:['有点累了，近一点就好','少一点折腾，早点坐下来'],chill:['还能再坐一会儿','愿意绕一点路，换一个对的氛围'],hype:['今晚放开玩','还有电，想把今晚过得特别一点']};
@@ -45,7 +46,7 @@
  function save(){try{localStorage.setItem('tonight-checkins-v1',JSON.stringify(history));}catch{toast('浏览器存储不可用，记录暂存在当前页面。');}}
  function weekCount(){const start=new Date();start.setHours(0,0,0,0);start.setDate(start.getDate()-(start.getDay()+6)%7);return history.filter(x=>new Date(x.date)>=start).length;}
  async function finish(){state.stage='end';await emit('今晚就到这？');}
- function syncGuidedDraft(c){const next=Guidance.sentence(c.selected,c.custom);$('draft').value=Guidance.syncDraft($('draft').value,c.generated,next);c.generated=next;updateActive();refreshSuggestions();}
+ function syncGuidedDraft(c){const next=L.text(Guidance.sentence(c.selected,c.custom));$('draft').value=Guidance.syncDraft($('draft').value,c.generated,next);c.generated=next;updateActive();refreshSuggestions();}
  function customizeGroup(group){const m=state.active,c=m.card;const hints=['比如：服务有点冷淡','比如：有露台，能看夜景','比如：想喝酸一点的','比如：6 个人，人均 150'];modal('自定义 · '+Guidance.groups[group].title.slice(2),`<form id="custom-prompt-form"><label for="custom-prompt">补充你的想法</label><input id="custom-prompt" maxlength="60" required placeholder="${hints[group]}" autocomplete="off"><p class="muted">添加后自动选中，可继续编辑输入框；没有笔记依据的条件会保留待确认。</p><button class="primary">添加并选中</button><button type="button" class="secondary" id="cancel-custom">取消</button></form>`);$('cancel-custom').onclick=()=>$('modal').close();$('custom-prompt-form').onsubmit=e=>{e.preventDefault();if(state.active!==m)return;const text=$('custom-prompt').value.trim();if(!text){$('custom-prompt').focus();return;}let id=Guidance.groups[group].items.includes(text)?text:c.custom.find(x=>x.group===group&&x.text===text)?.id;if(!id){if(c.custom.filter(x=>x.group===group).length>=6){toast('每组最多添加 6 条自定义');return;}id='custom-'+Date.now()+'-'+c.custom.length;c.custom.push({id,text,group});}if(!c.selected.includes(id))c.selected=Guidance.toggle(c.selected,id);syncGuidedDraft(c);$('modal').close();};$('custom-prompt').focus();}
  async function action(name,value){
  if(name==='customize'){customizeGroup(Number(value));return;}
@@ -53,9 +54,9 @@
 
  if(name==='toggle-clarify'){state.active.card.selected=Guidance.toggleClarify(state.active.card.selected,value);updateActive();return;}
  if(name==='confirm-clarify'){const text=state.active.card.selected.join('，');consume(text);pushUser(text);await interpret(text,true,true);return;}
- if(name==='toggle-prompt'){const c=state.active.card;c.selected=Guidance.toggle(c.selected,value);const next=Guidance.sentence(c.selected,c.custom);$('draft').value=Guidance.syncDraft($('draft').value,c.generated,next);c.generated=next;updateActive();refreshSuggestions();return;}
+ if(name==='toggle-prompt'){const c=state.active.card;c.selected=Guidance.toggle(c.selected,value);const next=L.text(Guidance.sentence(c.selected,c.custom));$('draft').value=Guidance.syncDraft($('draft').value,c.generated,next);c.generated=next;updateActive();refreshSuggestions();return;}
  if(name==='send-guided'){await submitDraft();return;}
- if(name==='example'){$('draft').value=Samples.example;await submitDraft();return;}
+ if(name==='example'){$('draft').value=L.text(Samples.example);await submitDraft();return;}
 
  if(name==='select'){state.selected=value;state.active.card.selected=value;updateActive();return;}
  if(name==='edit'){consume('改一改');pushUser('改一改');state.stage='complaint';await emit('直接告诉我哪里要改，我会重新复述。');$('draft').focus();return;}
@@ -68,7 +69,7 @@
  voice.cancel();
  if(index<2){
   if(state.stage!=='complaint'){consume('转到吐槽测试');state.intent=null;state.record=null;state.stage='complaint';await emit('来补做这项测试。换一种说法试试，之前完成的进度还在。');}
-  $('draft').value=draft;refreshSuggestions();$('draft').focus();scrollBottom();return;
+  $('draft').value=L.text(draft);refreshSuggestions();$('draft').focus();scrollBottom();return;
  }
  if(state.stage!=='recommend'){
   const snapshot=messages.findLast(m=>m.role==='ai'&&m.card?.type==='recommend')?.card;
@@ -76,7 +77,7 @@
   if(snapshot){state.intent=structuredClone(snapshot.intent);state.mood=snapshot.mood;state.results=structuredClone(snapshot.results);state.selected=snapshot.selected;state.stage='recommend';await emit('已重新打开可操作的推荐卡。补做测试就好，之前的打卡和测试进度会保留。');}
   else{state.intent=await AI.understand(Samples.example);state.mood='chill';if(pool().length<2)state.pool=Samples.candidates.map(b=>b.id);await pushAI('先用示例吐槽为你准备推荐卡，可以直接体验这一项测试。');await recommend();}
  }
- $('draft').value=index===3?'太远了':'';refreshSuggestions();
+ $('draft').value=index===3?L.text('太远了'):'';refreshSuggestions();
  const root=thread.querySelector(`[data-message="${state.active.id}"]`);
  const target=index===2?root.querySelector('[data-action="rerank"][data-value="hype"]'):index===4?root.querySelector('[data-action="depart"]'):$('draft');
  if(target){target.classList.remove('test-target');void target.offsetWidth;target.classList.add('test-target');target.focus({preventScroll:true});if(index!==3)target.scrollIntoView({behavior:'smooth',block:'center'});else scrollBottom();}
@@ -85,11 +86,12 @@
  async function run(fn){if(state.busy){toast('小晚正在整理，稍等一下。');return;}state.busy=true;$('restart-demo').disabled=true;$('send').disabled=true;$('voice').disabled=true;try{await fn();}catch(e){toast(e.message||'出了点问题，请重试。');if(!state.active)await emit('刚才没有完成，你可以重试。');}finally{state.busy=false;$('restart-demo').disabled=false;$('send').disabled=false;$('voice').disabled=false;setStatus(stageStatus());refreshSuggestions();}}
  thread.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.disabled)return;const article=b.closest('[data-message]');if(!article||String(state.active?.id)!==article.dataset.message)return;if(b.dataset.intentField){editKeyword(b.dataset.intentField,Number(b.dataset.intentIndex));return;}if(b.dataset.action)run(()=>action(b.dataset.action,b.dataset.value));});
  async function submitDraft(){const text=$('draft').value.trim();if(!text)return;voice.cancel();$('draft').value='';refreshSuggestions();const stage=state.stage,custom=state.active?.card.type==='complaint'?state.active.card.custom.filter(x=>state.active.card.selected.includes(x.id)):[];
- const direct=({context:{'进入情境':'enter'},first:{'打卡离开':'leave'},recap:{'对，就这样':'confirm','改一改':'edit'},departure:{'我们到啦，打个卡':'arrive'},end:{'再决定一次':'restart'}})[stage]?.[text];
+ const command=L.en?Object.keys(window.EnglishStrings).find(k=>L.text(k)===text)||text:text;
+ const direct=({context:{'进入情境':'enter'},first:{'打卡离开':'leave'},recap:{'对，就这样':'confirm','改一改':'edit'},departure:{'我们到啦，打个卡':'arrive'},end:{'再决定一次':'restart'}})[stage]?.[command];
  if(direct){await action(direct,'');return;}
- if(stage==='celebrate'&&['很合拍','还不错','不太合适'].includes(text)){await action('feedback',{'很合拍':'good','还不错':'okay','不太合适':'bad'}[text]);return;}
- if(stage==='mood'){const key=Object.keys(moods).find(k=>moods[k][0]===text);if(key){await action('mood',key);return;}}
- if(stage==='recommend'&&text==='换一批'){await action('batch','');return;}
+ if(stage==='celebrate'&&['很合拍','还不错','不太合适'].includes(command)){await action('feedback',{'很合拍':'good','还不错':'okay','不太合适':'bad'}[command]);return;}
+ if(stage==='mood'){const key=Object.keys(moods).find(k=>moods[k][0]===command);if(key){await action('mood',key);return;}}
+ if(stage==='recommend'&&command==='换一批'){await action('batch','');return;}
  consume(text);pushUser(text);
  if(['complaint','clarify','recap'].includes(stage)){await interpret(text,!!state.intent,stage==='clarify',custom);}
  else if(stage==='recommend'){setStatus('正在理解…');await delay(300);const parsed=await AI.understand(text);state.intent=Guidance.merge(state.intent,parsed,text);reviewer?.track({type:'input',stage,text,intent:state.intent});if(AI.needsClarification(state.intent)){state.stage='clarify';await emit('这里有两种相反的氛围，你更偏向哪一种？');}else await recommend();}
@@ -98,13 +100,13 @@
  function suggestionsForStage(){switch(state.stage){case 'complaint':return state.active?.card.selected?.length?[]:['刚那家太吵了，想安静点','想找个热闹的地方','有点饿了想吃东西','离这近一点就行'];case 'recommend':return ['太远了','想要更热闹的','预算再低一点','换一批'];case 'context':return ['进入情境'];case 'first':return ['打卡离开'];case 'clarify':return Guidance.clarifyItems;case 'recap':return ['对，就这样','改一改'];case 'mood':return Object.values(moods).map(x=>x[0]);case 'departure':return ['我们到啦，打个卡'];case 'celebrate':return ['很合拍','还不错','不太合适'];case 'end':return ['再决定一次'];default:return [];}}
  function refreshSuggestions(){const draft=$('draft').value.trim(),items=draft?Guidance.complete(draft):suggestionsForStage();$('suggestions').innerHTML=items.map(x=>`<button class="suggestion-chip" data-suggestion="${esc(x)}" data-append="${!!draft}">${draft?Conversation.star:''}${esc(x)}</button>`).join('');}
  $('draft').addEventListener('input',refreshSuggestions);
- $('suggestions').onclick=e=>{const b=e.target.closest('[data-suggestion]');if(!b)return;const text=b.dataset.suggestion;const current=$('draft').value.trim();$('draft').value=b.dataset.append==='true'&&current?current.replace(/[，,。\s]+$/,'')+'，'+text:text;refreshSuggestions();$('draft').focus();};
+ $('suggestions').onclick=e=>{const b=e.target.closest('[data-suggestion]');if(!b)return;const text=L.text(b.dataset.suggestion);const current=$('draft').value.trim();$('draft').value=b.dataset.append==='true'&&current?current.replace(/[，,。\s]+$/,'')+'，'+text:text;refreshSuggestions();$('draft').focus();};
  let placeholderIndex=0;setInterval(()=>{if(!$('draft').value)$('draft').placeholder=Guidance.placeholders[placeholderIndex++%Guidance.placeholders.length];},3000);
 
  $('composer').onsubmit=e=>{e.preventDefault();if(!state.busy)run(submitDraft);};
  function modal(titleText,html){$('modal-title').textContent=titleText;$('modal-body').innerHTML=html;$('modal').showModal();}
  $('close-modal').onclick=()=>$('modal').close();
- function editKeyword(field,index){if(state.busy)return;const value=field==='budget'?state.intent.budget:state.intent[field][index];modal('修改这条条件',`<form id="keyword-form"><input id="keyword" aria-label="条件" value="${esc(value)}" ${field==='budget'?'type="number" min="0" max="100000"':'maxlength="100"'}><button class="primary">保存修改</button><button type="button" class="secondary" id="delete-keyword">删除条件</button></form>`);const apply=remove=>{const raw=$('keyword').value.trim();if(field==='budget'){const number=Number(raw);if(!remove&&raw&&(!Number.isFinite(number)||number<0)){toast('请填写有效预算');return;}state.intent.budget=remove||!raw?null:number;}else if(remove||!raw)state.intent[field].splice(index,1);else state.intent[field][index]=raw;state.active.card.intent=structuredClone(state.intent);updateActive();$('modal').close();};$('keyword-form').onsubmit=e=>{e.preventDefault();apply(false);};$('delete-keyword').onclick=()=>apply(true);}
+ function editKeyword(field,index){if(state.busy)return;const value=field==='budget'?state.intent.budget:state.intent[field][index];modal('修改这条条件',`<form id="keyword-form"><input id="keyword" aria-label="条件" value="${esc(L.text(value))}" ${field==='budget'?'type="number" min="0" max="100000"':'maxlength="100"'}><button class="primary">保存修改</button><button type="button" class="secondary" id="delete-keyword">删除条件</button></form>`);const apply=remove=>{const raw=L.normalize($('keyword').value.trim());if(field==='budget'){const number=Number(raw);if(!remove&&raw&&(!Number.isFinite(number)||number<0)){toast('请填写有效预算');return;}state.intent.budget=remove||!raw?null:number;}else if(remove||!raw)state.intent[field].splice(index,1);else state.intent[field][index]=raw;state.active.card.intent=structuredClone(state.intent);updateActive();$('modal').close();};$('keyword-form').onsubmit=e=>{e.preventDefault();apply(false);};$('delete-keyword').onclick=()=>apply(true);}
  $('help').onclick=()=>{modal('今晚去哪 · 怎么用','<p>说说刚才哪里不对 → 核对任务 → 选状态 → 比较三家 → 出发打卡。</p><p>所有步骤都留在对话里，可以向上翻看。下方输入栏随时可用；确认过的卡片会变成只读。</p><p>当前是离线规则演示，店铺和小红书笔记均为虚构示例，未接入实时位置、打车或营业信息。</p><button id="reopen-review" class="secondary">重看评审导览</button>');$('reopen-review').onclick=()=>{$('modal').close();reviewer.showGuide();};};
  $('candidates').onclick=()=>{modal('我的候选',`<p>至少选择两家。更改后，下一次推荐会使用新的候选池。</p><div id="pool-list">${[...Samples.candidates,...custom].map(b=>`<label class="pool-item"><input type="checkbox" value="${esc(b.id)}" ${state.pool.includes(b.id)?'checked':''}><span>${esc(b.name)}<small>${esc(Flow.meta(b))}</small></span></label>`).join('')}</div><button id="add-candidate" class="secondary">加入自己的笔记</button>`);$('pool-list').onchange=e=>{if(e.target.checked)state.pool.push(e.target.value);else state.pool=state.pool.filter(x=>x!==e.target.value);};$('add-candidate').onclick=()=>{modal('加入自己的笔记',`<form id="import-form">${[['name','店名'],['area','区域'],['price','人均（可留空）'],['distance','距离 km（可留空）'],['tags','标签，用逗号分隔'],['url','笔记链接（可留空）'],['source','来源（可留空）']].map(([k,v])=>`<label>${v}<input name="${k}"></label>`).join('')}<label>笔记原文<textarea name="text" required></textarea></label><button class="primary">加入候选</button></form>`);$('import-form').onsubmit=e=>{e.preventDefault();try{const data=Object.fromEntries(new FormData(e.target));data.tags=Flow.split(data.tags);const b=Flow.candidate(data,'manual-'+Date.now());custom.push(b);state.pool.push(b.id);try{localStorage.setItem('tonight-candidates-v1',JSON.stringify(custom));}catch{}$('modal').close();toast('已加入候选，下次推荐会一起比较。');}catch(err){toast(err.message);}};};};
  $('voice').innerHTML=Icons.render('microphone.fill');$('send').innerHTML=Icons.render('arrow.right');

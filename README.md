@@ -8,6 +8,10 @@ https://jamiechou2004.github.io/redcowork-ai-demo/src/
 
 GitHub Pages 自动发布 main 分支，推送后通常需要几分钟更新。该链接是离线 Demo 预览，不是 REDcowork 最终提交链接。
 
+## English version
+
+[Open the English prototype](https://jamiechou2004.github.io/redcowork-ai-demo/src/?lang=en). Use the EN / 中文 switch in the header to change languages. The English UI shares the Chinese version’s conversation flow, shortlist and ranking logic. English preference input and browser-supported English voice input are supported; this remains an offline rules-based demo with fictional venue notes, prices and distances.
+
 ## 本地使用
 
 直接用现代浏览器打开 `src/index.html`，无需安装依赖或构建。脚本按 samples → ai → flow → mascot → icons → app 顺序加载，使用经典脚本命名空间，避免本地文件的 ES Module 跨域限制。
