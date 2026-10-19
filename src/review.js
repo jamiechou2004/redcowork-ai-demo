@@ -23,7 +23,7 @@ window.Review=(()=>{
  function mark(index){if(done[index])return;done[index]=true;try{localStorage.setItem(progressKey,JSON.stringify(done));}catch{}draw();}
  function track(event){if(event.type==='input'&&['complaint','clarify','recap','recommend'].includes(event.stage)){if(Guidance.preferenceCount(event.intent)>0)mark(0);if(/蹦迪|热闹/.test(event.text)&&event.intent.want.includes('热闹'))mark(1);if(event.stage==='recommend'&&/太远/.test(event.text))mark(3);}if(event.type==='rerank'&&event.mood==='hype')mark(2);if(event.type==='checkin')mark(4);}
  let last='';function sync(stage,activity){const content=stages[stage]||stages.context;const id=stage+activity;if(id===last)return;last=id;$('ai-explainer').innerHTML=`<span class="explain-kicker">${activity==='正在理解…'||activity==='正在翻笔记…'?esc(activity):'此刻的任务'}</span><h3>${content[0]}</h3><p>${content[1]}</p>`;}
- draw();sync('context','');let seen=false;try{seen=localStorage.getItem(key)==='done';}catch{}if(!seen)showGuide();return{track,sync,showGuide};
+ draw();sync('context','');let seen=false;try{seen=localStorage.getItem(key)==='done';}catch{}if(!seen)showGuide();return{track,sync,showGuide,resetTests(){done=[false,false,false,false,false];try{localStorage.setItem(progressKey,JSON.stringify(done));}catch{}draw();}};
  }
  return {create};
 })();
