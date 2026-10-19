@@ -6,7 +6,7 @@ function setup(supported=true){
  const nodes={};for(const id of ['voice','voice-status','thought'])nodes[id]={textContent:'',value:id==='thought'?'原来的文字':'',attrs:{},classList:{values:new Set(),add(x){this.values.add(x)},remove(x){this.values.delete(x)}},setAttribute(k,v){this.attrs[k]=v}};
  let next=0;const timers=new Map(),sessions=[];
  class Speech{constructor(){sessions.push(this)}start(){this.onstart()}stop(){this.onend()}abort(){this.onerror?.({error:'aborted'});this.onend()}}
- const ctx=vm.createContext({window:supported?{SpeechRecognition:Speech}:{},$:id=>nodes[id],state:{screen:'input'},invalidate(){},setTimeout(fn){timers.set(++next,fn);return next},clearTimeout(id){timers.delete(id)}});
+ const ctx=vm.createContext({window:supported?{SpeechRecognition:Speech}:{},$:id=>nodes[id],state:{screen:'input'},agentStatus(){},invalidate(){},setTimeout(fn){timers.set(++next,fn);return next},clearTimeout(id){timers.delete(id)}});
  vm.runInContext('let recognition=null,recording=false,discardSpeech=false;'+helpers+voice,ctx);
  return {nodes,sessions,run:c=>vm.runInContext(c,ctx),expire(){for(const [id,fn]of timers){timers.delete(id);fn()}},timers};
 }

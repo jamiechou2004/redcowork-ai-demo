@@ -13,5 +13,7 @@ window.Samples = (() => {
     ['snack','夜猫食堂','南山',1.8,118,['能吃东西','热闹','适合 4 个人'],'◒',['一桌点了炸鸡、串烧和主食，适合晚上想吃东西的时候。','大家边吃边聊天，店里比较热闹，不是安静独处的氛围。','四个人这次人均 118，示例距离 1.8km；菜单和座位以店家确认为准。']]
   ];
   const candidates=rows.map(([id,name,area,distance,price,tags,art,quotes])=>({id,name,area,distance,price,tags,art,notes:quotes.map((text,i)=>({id:`${id}-${i}`,text,source:`示例笔记 ${i+1} · 虚构体验记录`}))}));
+  const minutes={slow:9,island:16,amber:6,record:5,roof:25,alley:4,moon:20,orange:23,supper:5,snack:8};
+  candidates.forEach(b=>b.travelMinutes=minutes[b.id]);
   return { candidates, example:'刚那家太酒店风了，人好吵根本聊不了天。想找个安静 cozy 点的，酒偏甜一点，人均两百左右吧' };
 })();
