@@ -21,7 +21,7 @@ const {AI,Samples}=context.window;
   const next=await AI.match(intent,'chill',Samples.candidates.filter(b=>!ranked.some(x=>x.id===b.id)));
   assert(next.every(b=>!ranked.some(x=>x.id===b.id)));
   const expensive=await AI.match({...neutral,budget:100},'chill',Samples.candidates);
-  assert(expensive.every(b=>b.matchTags.some(t=>t.label.includes('超预算'))));
+  assert(expensive.every(b=>b.matchTags.some(t=>t.label.includes(b.price>100?'超预算':'预算内'))));
   await assert.rejects(()=>AI.match(intent,'chill',[]),/没找到够合适/);
   await assert.rejects(()=>AI.callModel([]),/尚未配置/);
   console.log('PASS: intent extraction, budgets, negation, mood weighting, ranking, evidence, pagination, budget warnings, insufficient candidates and unconfigured model.');
