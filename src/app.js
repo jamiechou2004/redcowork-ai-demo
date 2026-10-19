@@ -11,7 +11,11 @@
   const pool=()=>all().filter(b=>state.pool.includes(b.id));
   const chosen=()=>state.results.find(b=>b.id===state.selected);
   function save(){try{localStorage.setItem(historyKey,JSON.stringify(history.slice(-100)));storageOkay=true;}catch{storageOkay=false;}$('storage-status').textContent=storageOkay?'已保存在当前浏览器。':'浏览器存储不可用，本次记录仅在当前页面保留。';}
-  function stopVoice(){if(recognition){discardSpeech=true;try{recognition.abort();}catch{}recording=false;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','开始语音输入');$('voice-status').textContent='录音已取消，已有文字已保留。';}}
+  let toastTimer;
+  function hideToast(){clearTimeout(toastTimer);$('voice-status').classList.remove('visible');$('voice-status').textContent='';}
+  function toast(message){hideToast();$('voice-status').textContent=message;$('voice-status').classList.add('visible');toastTimer=setTimeout(hideToast,3200);}
+  function resetVoice(){recording=false;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','开始语音输入');$('voice').setAttribute('aria-pressed','false');}
+  function stopVoice(){if(!recognition)return;const session=recognition;recognition=null;discardSpeech=true;resetVoice();try{session.abort();}catch{}toast('录音已取消，已有文字已保留。');}
   function show(name){if(name!==state.screen){state.run++;state.busy=false;}if(name!=='input')stopVoice();state.screen=name;screens.forEach(s=>$(s+'-screen').hidden=s!==name);const stage={pool:0,import:0,input:0,confirm:1,clarify:1,edit:1,mood:2,recommend:3,departure:4,checkin:5,negative:5,history:5}[name];$('progress').innerHTML=Array.from({length:6},(_,i)=>`<span class="${i<=stage?'active':''}"></span>`).join('');if(name==='pool')renderPool();const onboarding=['welcome','guide'].includes(name);document.querySelector('header').hidden=onboarding;$('progress').hidden=onboarding;$('header-tools').hidden=name!=='input';window.scrollTo(0,0);const h=$(name+'-screen').querySelector('h1');h.tabIndex=-1;h.focus({preventScroll:true});}
   function dialog(title,html){$('dialog-title').textContent=title;$('dialog-content').innerHTML=html;$('detail-dialog').showModal();}
   $('close-dialog').onclick=()=>$('detail-dialog').close();
@@ -87,8 +91,19 @@
   $('history-back').onclick=()=>show(state.historyBack);$('finish').onclick=$('skip-feedback').onclick=()=>show('input');
   $('new-decision').onclick=()=>{Mascot.reset();state.started=Date.now();state.record=null;state.intent=null;state.results=[];state.batches=[];state.seen=[];$('thought').value='';$('quick-chips').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed','false'));updateQuickStatus();show('input');};
   const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!Speech){$('voice').disabled=true;$('voice-status').textContent='当前浏览器不支持语音，请直接输入文字。';}
-  else{$('voice-status').textContent='点击语音输入；识别依赖浏览器和网络。离开此页会停止录音。';$('voice').onclick=()=>{if(recording){recognition.stop();return;}discardSpeech=false;recognition=new Speech();recognition.lang='zh-CN';recognition.interimResults=false;recognition.onstart=()=>{if(state.screen!=='input'){discardSpeech=true;recognition.abort();return;}recording=true;$('voice').classList.add('recording');$('voice').setAttribute('aria-label','结束录音');$('voice-status').textContent='正在听，你慢慢说。点击结束后可修改文字。';};recognition.onresult=e=>{if(discardSpeech||state.screen!=='input')return;$('thought').value+=Array.from(e.results).map(r=>r[0].transcript).join('');invalidate();$('voice-status').textContent='语音已转文字，请核对后继续。';};recognition.onerror=()=>{if(!discardSpeech)$('voice-status').textContent='这次没能听清：权限或识别服务不可用。已有文字保留，可以直接打字或重新尝试。';};recognition.onend=()=>{recording=false;$('voice').classList.remove('recording');$('voice').setAttribute('aria-label','开始语音输入');};try{recognition.start();}catch{$('voice-status').textContent='语音启动失败，请直接输入文字。';}};}
+  $('voice').setAttribute('aria-pressed','false');
+  $('voice').onclick=()=>{
+    if(!Speech){toast('当前浏览器不支持语音，请直接输入文字。');return;}
+    if(recognition){if(recording){try{recognition.stop();}catch{stopVoice();}}return;}
+    hideToast();discardSpeech=false;
+    const session=new Speech();recognition=session;let resultMessage='没有识别到语音，已有文字已保留。';
+    session.lang='zh-CN';session.interimResults=false;
+    session.onstart=()=>{if(recognition!==session||state.screen!=='input'){try{session.abort();}catch{}return;}recording=true;$('voice').classList.add('recording');$('voice').setAttribute('aria-label','正在录音，点击结束');$('voice').setAttribute('aria-pressed','true');};
+    session.onresult=e=>{if(recognition!==session||discardSpeech||state.screen!=='input')return;const text=Array.from(e.results).map(r=>r[0].transcript).join('');if(text){$('thought').value+=text;invalidate();resultMessage='语音已转文字，请核对后继续。';}};
+    session.onerror=e=>{if(recognition!==session||discardSpeech)return;resultMessage=e.error==='no-speech'?'没有识别到语音，请再试一次。':e.error==='aborted'?'录音已取消，已有文字已保留。':'语音识别失败，已有文字已保留，请重试或打字。';};
+    session.onend=()=>{if(recognition!==session)return;recognition=null;resetVoice();if(!discardSpeech)toast(resultMessage);};
+    try{session.start();}catch{if(recognition===session){recognition=null;resetVoice();toast('语音启动失败，请重试或直接输入文字。');}}
+  };
   document.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{if(b.dataset.demo==='generation'){if(!state.intent){dialog('先准备偏好','<p>先完成吐槽与偏好核对，再演示生成失败和重试。</p>');return;}recommend(false,true);}if(b.dataset.demo==='insufficient')insufficient();if(b.dataset.demo==='voice')dialog('这次没能听清 · 演示','<p>权限或识别不可用时，保留已有输入，改用文字。你也可以返回输入页主动重试录音。</p>');if(b.dataset.demo==='storage')dialog('记录暂时存不下来 · 演示','<p>浏览器禁用存储或容量不足时，决定仍已完成，无需重走流程。本次记录只保留在当前页面。真实保存失败时，打卡页和集卡页都会显示同样的存储提示。</p>');});
   $('pool-week').onclick=()=>{const now=new Date(),monday=new Date(now);monday.setDate(now.getDate()-(now.getDay()+6)%7);monday.setHours(0,0,0,0);const records=history.filter(r=>r.date>=dateKey(monday)&&r.date<=dateKey(now));dialog('本周 Chill 打卡',`<p>本周已果断决定 ${records.length} 次</p><p>${records.length>=3?'已解锁「不纠结」徽章':'再 '+(3-records.length)+' 次解锁「不纠结」徽章'}</p><p class="muted">${storageOkay?'基于本机实际打卡记录。':'存储受限，仅本次页面记录。'}</p>`);};
   renderPool();let onboarded=false;try{onboarded=localStorage.getItem(onboardKey)==='done';}catch{}show(onboarded?'input':'welcome');
