@@ -8,3 +8,5 @@ body{background:#eeedeb}h1{font-size:30px;letter-spacing:-.8px}.intro{font-size:
 .pool-details{font-size:13px;margin:12px 0}.pool-details summary{min-height:44px;display:flex;align-items:center;color:#707070;cursor:pointer}.pool-details summary::before{content:'＋';margin-right:10px;color:#ff2442}.pool-details[open] summary::before{content:'−'}.last-stop{width:100%;font:inherit;font-size:14px;margin-top:12px;border:0;background:transparent;min-height:36px}.secondary{background:white;border:0}.eyebrow{color:#b80f2c}
 
 h1[tabindex="-1"]:focus{outline:none}
+
+.voice{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0}.voice svg{width:24px;height:24px;display:block}
