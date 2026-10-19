@@ -35,6 +35,17 @@ window.AI = (() => {
     if(/4\s*个|四个|四人|4人/.test(input))want.push('适合 4 个人');
     if(/甜/.test(input)&&!/不(?:要|喜欢|想喝).*甜|别.*甜/.test(input))taste.push('酒偏甜');
     if(/不(?:要|喜欢|想喝).*甜|别.*甜/.test(input))dislike.push('酒偏甜');
+    if(/太贵|便宜|预算再低|预算低/.test(input))want.push('预算友好');
+    if(/太远|走路能到|打车\s*10\s*分钟内/.test(input))want.push('近一点');
+    if(/人太多|人少/.test(input))want.push('人少一点');
+    if(/玩游戏/.test(input))want.push('能玩游戏');
+    if(/低度/.test(input))taste.push('低度一点');
+    if(/特调/.test(input))taste.push('有特调');
+    if(/不喝酒/.test(input))want.push('不喝酒');
+    if(/2\s*个|两个人|两人/.test(input))want.push('适合 2 个人');
+    if(/正餐/.test(input))want.push('能吃东西');
+    if(/灯光暗/.test(input))want.push('灯光暗一点');
+    if(/还在营业/.test(input))want.push('营业时间待确认');
     const budget=input.match(/(?:人均|预算|不超过|最多|¥|￥)\s*([\d]+(?:\.\d+)?|[零一二两三四五六七八九十百千]+)/);
     return {dislike:[...new Set(dislike)],want:[...new Set(want)],taste,budget:budget?(/^\d/.test(budget[1])?Number(budget[1]):chineseNumber(budget[1])):null,mood:null};
   }
@@ -49,7 +60,7 @@ window.AI = (() => {
     if(intent.dislike.includes('酒偏甜')&&bar.tags.includes('酒偏甜'))matchTags.push({label:'甜口，与口味偏好冲突',ok:false});
     if(intent.dislike.includes('吵')&&bar.tags.includes('热闹')||intent.want.includes('安静')&&bar.tags.includes('现场音乐'))matchTags.push({label:'有音乐演出，可能偏吵',ok:false});
     const distanceWeight=mood==='tired'?5:mood==='hype'?.3:1.2;
-    const score=desired.filter(t=>bar.tags.includes(t)).length*9-(bar.distance===null?3:bar.distance)*(distanceWeight+(intent.want.includes('近一点')?3:0))-(intent.budget!==null&&bar.price!==null?Math.max(0,bar.price-intent.budget)*.25:0)-intent.dislike.filter(t=>bar.tags.includes(t)).length*14-(intent.want.includes('安静')&&bar.tags.includes('热闹')?14:0)-(intent.dislike.includes('吵')&&bar.tags.includes('热闹')?14:0)+(mood==='hype'&&bar.tags.includes('热闹')?16:0);
+    const score=-(intent.want.includes('预算友好')?(bar.price===null?10:bar.price*.15):0)+desired.filter(t=>bar.tags.includes(t)).length*9-(bar.distance===null?3:bar.distance)*(distanceWeight+(intent.want.includes('近一点')?3:0))-(intent.budget!==null&&bar.price!==null?Math.max(0,bar.price-intent.budget)*.25:0)-intent.dislike.filter(t=>bar.tags.includes(t)).length*14-(intent.want.includes('安静')&&bar.tags.includes('热闹')?14:0)-(intent.dislike.includes('吵')&&bar.tags.includes('热闹')?14:0)+(mood==='hype'&&bar.tags.includes('热闹')?16:0);
     return {...bar,matchTags,score};
   }
   async function match(intent,mood,candidates){
