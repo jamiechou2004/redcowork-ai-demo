@@ -11,6 +11,13 @@ const {AI,Samples}=context.window;
   assert.equal((await AI.understand('人均 0')).budget,0);
   assert.equal((await AI.understand('想坐一会')).budget,null);
   assert(!(await AI.understand('不要甜的酒')).taste.includes('酒偏甜'));
+  // One clear preference is sufficient; missing optional details are not ambiguity.
+  for(const text of ['想找个能蹦迪的地方','想找个热闹的地方','有现场音乐','离这近一点','酒偏甜','人均200']) {
+    assert.equal(AI.needsClarification(await AI.understand(text)),false,text);
+  }
+  for(const text of ['想找个好玩的地方','随便吧','想要安静又热闹']) {
+    assert.equal(AI.needsClarification(await AI.understand(text)),true,text);
+  }
   const neutral={dislike:[],want:[],taste:[],budget:null,mood:null};
   const tired=await AI.match(neutral,'tired',Samples.candidates);
   const hype=await AI.match(neutral,'hype',Samples.candidates);
